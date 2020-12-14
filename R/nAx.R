@@ -332,18 +332,18 @@ lt_a_pas <-
 #' @param lx numeric.  Vector of lifetable survivorship in standard abridged age groups.
 #' @param Age integer. Vector of lower bounds of abridged age groups.
 #' @param AgeInt integer. Vector of age group intervals.
-#' @param a0rule character. Either \code{"ak"} (default) or \code{"cd"}.
+#' @param a0rule character. Either `"ak"` (default) or `"cd"`.
 #' @param IMR numeric. Optional. {\ifelse{html}{\out{q<sub>0</sub>}}{\eqn{q_0}}}, the death probability in first year of life, in case available separately.
-#' @param Sex character. \code{"m"}, \code{"f"} or \code{"b"} for male, female, or both.
-#' @param region character. \code{"n"}, \code{"e"}, \code{"s"} or \code{"w"} for North, East, South, or West.
+#' @param Sex character. `"m"`, `"f"` or `"b"` for male, female, or both.
+#' @param region character. `"n",` `"e"`, `"s"` or `"w"` for North, East, South, or West.
 #' @param mod logical. Whether or not to use Gerland's modification for ages 5-14. Default \code{TRUE}.
 #' @param SRB numeric. The sex ratio at birth (boys/girls), default 1.05.
 #' @param closeout logical. Whether or not to estimate open age a(x) via extrapolation. Default \code{TRUE}.
 #' @inheritParams lt_a_closeout
 #'
-#' @details a(x) for age 0 and age group 1-4 are based on Coale-Demeny {\ifelse{html}{\out{q<sub>0</sub>}}{\eqn{q_0}}}-based lookup tables. An approximation to get from M(0) to {\ifelse{html}{\out{q<sub>0</sub>}}{\eqn{q_0}}} for the sake of generating a(0) and 4a1 is used. The final a(x) value is closed out using the \code{lt_a_closeout()} method (reciprocal and Mortpak methods are deprecated). Age groups must be standard abridged. No check on age groups is done.
+#' @details \eqn{a(x)} for age 0 and age group 1-4 are based on Coale-Demeny {\ifelse{html}{\out{q<sub>0</sub>}}{\eqn{q_0}}}-based lookup tables. An approximation to get from M(0) to {\ifelse{html}{\out{q<sub>0</sub>}}{\eqn{q_0}}} for the sake of generating a(0) and 4a1 is used. The final a(x) value is closed out using the `lt_a_closeout()` method (reciprocal and Mortpak methods are deprecated). Age groups must be standard abridged. No check on age groups is done.
 #'
-#' There are different vectors one can specify for this method: ultimately it's either \code{nMx} or \code{nqx}, and the \code{nax} results will differ potentially quite a lot depending which you have on hand.
+#' There are different vectors one can specify for this method: ultimately it's either `nMx` or `nqx`, and the `nax`, but `nax` results should be reasonably close. For full convergence implying transitivity, instead use `lt_a_un()`
 
 #' @seealso
 #' \code{\link[DemoTools]{lt_a_closeout}}
@@ -371,15 +371,68 @@ lt_a_pas <-
 #' Age <- c(0,1,seq(5,85,by = 5))
 #' AgeInt <- age2int(Age, OAvalue = 5)
 #' # two quite different results depending whether you start with mx or qx
-#' lt_id_morq_a_greville(nMx = nMx, Age = Age, AgeInt = AgeInt, Sex = 'f',region = 'w')
-#' lt_id_morq_a_greville(nqx = nqx, Age = Age, AgeInt = AgeInt, Sex = 'f',region = 'w')
+#' lt_id_morq_a_greville(nMx = nMx, 
+#'                       Age = Age, 
+#'                       AgeInt = AgeInt, 
+#'                       Sex = 'f',
+#'                       region = 'w')
+#' lt_id_morq_a_greville(nqx = nqx, 
+#'                       Age = Age, 
+#'                       AgeInt = AgeInt, 
+#'                       Sex = 'f',
+#'                       region = 'w')
 #' # same, qx comes from lx (Except OAG, because qx closed above w NA)
-#' lt_id_morq_a_greville(lx = lx, Age = Age, AgeInt = AgeInt, Sex = 'f',region = 'w')
+#' lt_id_morq_a_greville(lx = lx, 
+#'                       Age = Age, 
+#'                       AgeInt = AgeInt, 
+#'                       Sex = 'f',
+#'                       region = 'w')
 #' # both qx and lx given, but lx not used for anything = same as qx
-#' lt_id_morq_a_greville(nqx = nqx, lx = lx, Age = Age, AgeInt = AgeInt, Sex = 'f',region = 'w')
-#'
+#' lt_id_morq_a_greville(nqx = nqx, 
+#'                       lx = lx, 
+#'                       Age = Age, 
+#'                       AgeInt = AgeInt, 
+#'                       Sex = 'f',
+#'                       region = 'w')
+#'#'
 #' # nMx taken over lx.
-#' lt_id_morq_a_greville(nMx = nMx, lx = lx, Sex = 'f', Age = Age, AgeInt = AgeInt, region = 'w')
+#' lt_id_morq_a_greville(nMx = nMx,  
+#'                       lx = lx, 
+#'                       Sex = 'f', 
+#'                       Age = Age, 
+#'                       AgeInt = AgeInt, 
+#'                       region = 'w')
+#' 
+#' # example of transitivity. UN ax method is iterative
+#' # and used greville on the inside
+#' 
+#' nMx <- c(0.11621,0.02268,0.00409,0.00212,0.00295,
+#'          0.00418,0.00509,0.00609,0.00714,0.00808,
+#'          0.00971,0.0125,0.0175,0.02551,0.03809,
+#'          0.05595,0.0809,0.15353,0.2557)
+#' AgeInt <- inferAgeIntAbr(vec = nMx)
+#' Age    <- int2age(AgeInt)
+#' nAx1   <- lt_a_un(nMx, 
+#'                   Age = Age,
+#'                   AgeInt = AgeInt, 
+#'                   a0rule = "ak",
+#'                   mod = TRUE, 
+#'                   closeout = TRUE)
+#' 
+#' nqx    <- lt_id_ma_q(nMx = nMx, 
+#'                      nax = nAx1, 
+#'                      AgeInt = AgeInt, 
+#'                      closeout = FALSE)
+#' nAx2 <- lt_a_un(nqx = nqx, 
+#'                 Age = Age,
+#'                 AgeInt = AgeInt, 
+#'                 a0rule = "ak", 
+#'                 mod= TRUE, 
+#'                 closeout = TRUE)
+#' 
+#' stopifnot(all(abs(nAx1[Age<75] - nAx2[Age<75]) < 1e-7))
+#'
+
 lt_id_morq_a_greville <- function(nMx,
                                   nqx,
                                   lx,
@@ -604,6 +657,36 @@ lt_id_morq_a_greville <- function(nMx,
 #' N <- length(ax)
 #' # default unit test...
 #' stopifnot(all(round(nAx1[Age<80],3) - ax[Age<80] == 0)) # spot on
+#' 
+#' # another example:
+#' 
+#' nMx <- c(0.11621,0.02268,0.00409,0.00212,0.00295,
+#'          0.00418,0.00509,0.00609,0.00714,0.00808,
+#'          0.00971,0.0125,0.0175,0.02551,0.03809,
+#'          0.05595,0.0809,0.15353,0.2557)
+#' AgeInt <- inferAgeIntAbr(vec = nMx)
+#' Age    <- int2age(AgeInt)
+#' nAx1   <- lt_a_un(nMx, 
+#'                   Age = Age,
+#'                   AgeInt = AgeInt, 
+#'                   a0rule = "ak",
+#'                   mod = TRUE, 
+#'                   closeout = TRUE)
+#' 
+#' nqx    <- lt_id_ma_q(nMx = nMx, 
+#'                      nax = nAx1, 
+#'                      AgeInt = AgeInt, 
+#'                      closeout = FALSE)
+#' nAx2 <- lt_a_un(nqx = nqx, 
+#'                 Age = Age,
+#'                 AgeInt = AgeInt, 
+#'                 a0rule = "ak", 
+#'                 mod= TRUE, 
+#'                 closeout = TRUE)
+#' 
+#' stopifnot(all(abs(nAx1[Age<75] - nAx2[Age<75]) < 1e-7))
+#'
+
 lt_a_un <- function(nMx,
                  nqx,
                  lx,
@@ -666,6 +749,7 @@ lt_a_un <- function(nMx,
       ...
     )
   }
+ 
   if (!missing(nqx) & missing(nMx)) {
     # UN (1982) p 31
     # http://www.un.org/esa/population/publications/Model_Life_Tables/Model_Life_Tables.htm
@@ -688,7 +772,8 @@ lt_a_un <- function(nMx,
       extrapFit = extrapFit,
       ...
     )
-
+    # no longer needed
+    closeout <- FALSE
     for (i in 1:maxit) {
       mxi   <- lt_id_qa_m(
                     nqx = nqx,
@@ -703,7 +788,6 @@ lt_a_un <- function(nMx,
         Sex = Sex,
         region = region,
         mod = mod,
-        closeout = FALSE,
         # no need to redo extrap in here
         ...
       )
@@ -713,7 +797,7 @@ lt_a_un <- function(nMx,
           nax = axi,
           AgeInt = AgeInt,
           IMR = IMR,
-          closeout = FALSE
+          closeout = closeout
         )
       smsq  <- sum((qxnew - nqx) ^ 2)
       if (smsq < tol) {

@@ -1,5 +1,5 @@
 ---
-title: "The lifetable with DemoTools"
+title: "Lifetables with DemoTools"
 author: "José Manuel Aburto, Ilya Kashnitsky, Monica Alexander, Jorge Cimentada, Tim Riffe"
 date: "`r Sys.Date()`"
 output: rmarkdown::html_vignette

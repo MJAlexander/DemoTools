@@ -64,12 +64,33 @@ rlog <- function(x, base = exp(1)) {
 #' lines(ma(x))
 #' lines(ma(x),9)
 #' }
-
+#' # some de facto unit tests:
+#' x <- 1:10
+#' d2 <- ma(x,2) - x
+#' d3 <- ma(x,3) - x
+#' d4 <- ma(x,4) - x
+#' d5 <- ma(x,5) - x
+#' # pop <- sample.int(10, 5, replace = T)
+#' # all should give same for linear data.
+#' stopifnot(all(abs(d2) < 1e-10, na.rm = TRUE))
+#' stopifnot(all(abs(d3) < 1e-10, na.rm = TRUE))
+#' stopifnot(all(abs(d4) < 1e-10, na.rm = TRUE))
+#' stopifnot(all(abs(d5) < 1e-10, na.rm = TRUE))
 
 ma <- function(x, n = 5) {
-  as.vector(stats::filter(x, rep(1 / n, n), sides = 2))
+  # This is PJ's fix from issue #127
+  if (n %% 2 == 1) {   # odd as before
+    out <- as.vector(stats::filter(x, rep(1 / n, n), sides = 2))
+  } else { # even...
+    temp <- as.vector(stats::filter(x, rep(1 / (2 * n), n), sides = 1))
+    out  <- shift.vector(temp, 
+                         shift = -n / 2 + 1, 
+                         fill = NA) + 
+            shift.vector(temp, 
+                         shift = -n / 2, fill = NA)
+  }
+  out
 }
-
 
 #' Rescale a vector proportionally to a new sum.
 
@@ -92,112 +113,24 @@ rescale_vector <- function(x, scale = 1) {
    scale * x / sum(x, na.rm = TRUE)
 }
 
-#' @title Determine whether a year is a leap year.
-#'
-#' @description In order to remove \code{lubridate} dependency, we self-detect leap years and adjust February accordingly. Code inherited from HMD.
-#'
-#' @param Year integer. Year to query.
-#'
-#' @return Logical value for whether the year is a leap year or not.
-#'
-#' @export
-#' @author Carl Boe
-
-is_LeapYear <-
-  function (Year) {
-    # CB: mostly good algorithm from wikipedia
-    Year <- floor(Year)
-    ifelse(((Year %% 4) == 0  &
-              (Year %% 100) != 0) | ((Year %% 400) == 0),
-           TRUE, FALSE)
-  }
-
-#' @title Determine the proportion of a year passed as of a particular date.
-#'
-#' @description The fraction returned by this is used e.g. for intercensal estimates.
-#'
-#' @param Year string or integer. 4-digit year.
-#' @param Month string or integer. Month digits, 1 or 2 characters.
-#' @param Day string or integer. Day of month digits, 1 or 2 characters.
-#' @param detect.mid.year logical. If \code{TRUE}, June 30 or July 1 will always return .5.
-#' @param detect.start.end logical. Whether or not Jan 1 always be 0 and Dec 31 always be 1. Default \code{TRUE}.
-#' @details Code inherited from HMD, slightly modified to remove matlab legacy bit.
-#' @export
-#' @examples
-#' ypart(2001,2,14) # general use
-#' ypart(2001,6,30) # mid year options, default detection
-#' ypart(2001,7,1)  # also
-#' ypart(2000,6,30) # no change for leap year, still detected as mid year
-#' ypart(2000,6,30, FALSE) # exact measure
-#' ypart(2000,7,1, FALSE)  # July 1 leap year
-#' ypart(2001,7,1, FALSE)  # July 1 not leap year
-#' ypart(2002,12,31, detect.start.end = FALSE) # assumes end of day by default.
-#' ypart(2002,1,1, detect.start.end = FALSE) # end of day year fraction
-#' ypart(2002,1,1, detect.start.end = TRUE)  # assume very begining of year
-
-
-ypart           <-
-  function(Year,
-           Month,
-           Day,
-           detect.mid.year = TRUE,
-           detect.start.end = TRUE) {
-    M           <- c(0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334)
-
-    if (detect.mid.year) {
-      .d        <- as.integer(Day)
-      .m        <- as.integer(Month)
-      if ((.d == 30 & .m == 6) | (.d == 1 & .m == 7)) {
-        return(.5)
-      }
-    }
-
-    if (detect.start.end) {
-      .d        <- as.integer(Day)
-      .m        <- as.integer(Month)
-      if (.d == 1 & .m == 1) {
-        return(0)
-      }
-      if (.d == 31 & .m == 12) {
-        return(1)
-      }
-    }
-
-    monthdur    <- diff(c(M, 365))
-    monthdur[2] <- monthdur[2] + is_LeapYear(Year)
-    M           <- cumsum(monthdur) - 31
-    return((M[Month] + Day) / sum(monthdur))
-
-  }
-
-
 #' Convert date to decimal year fraction.
 #'
 #' @description Convert a character or date class to decimal, taking into account leap years.
-#' @details This makes use of two HMD functions, \code{ypart()}, and \code{is_LeapYear()} to compute. If the date is numeric, it is returned as such. If it is \code{"character"}, we try to coerce to \code{"Date"} class, ergo, it is best to specify a character string in an unambiguous \code{"YYYY-MM-DD"} format.  If \code{date} is given in a \code{"Date"} class it is dealt with accordingly.
+#' @details This makes use of the \code{lubridate::decimal_date} to compute the proportion of the year that has passed. If the date is numeric, it is returned as such. If it is \code{"character"}, we try to coerce to date through \code{lubridate::ymd}, ergo, it is best to specify a character string in an unambiguous \code{"YYYY-MM-DD"} format.  If \code{date} is given in a \code{"Date"} class it is dealt with accordingly.
 #'
 #' @param date Either a \code{Date} class object or an unambiguous character string in the format \code{"YYYY-MM-DD"}.
 #'
 #' @return Numeric expression of the date, year plus the fraction of the year passed as of the date.
+#'
 #' @export
 dec.date  <- function(date) {
-  if (class(date) == "numeric") {
+
+  if (inherits(date, "numeric")) {
     return(date)
   }
-  if (class(date) == "character") {
-    date   <- as.Date(date)
-  }
-  day 	   <- as.numeric(format(date, '%d'))
-  month 	 <- as.numeric(format(date, '%m'))
-  year 	   <- as.numeric(format(date, '%Y'))
-  frac     <- ypart(
-    Year = year,
-    Month = month,
-    Day = day,
-    detect.mid.year = TRUE,
-    detect.start.end = TRUE
-  )
-  year + frac
+
+  res <- lubridate::decimal_date(lubridate::ymd(date))
+  res
 }
 
 
@@ -279,6 +212,191 @@ simplify.text <- function(string) {
   #	stringr::str_replace_all(lc, "[^[:lower:]]", "")
   gsub("[^a-z]", "" , lc)
 }
+
+#' Convert single age groups to five-year group abridged
+#' @description Convert single age groups to five-year group abridged
+#' @param Age a numeric vector with counts for age groups. These are assumed to begin at zero.
+#' @return A numeric vector with five-year age groups abridged
+#'
+#' @export
+#' @examples
+#' pop_male_counts <-
+#'   c(
+#'     `0` = 11684,
+#'     `1` = 11473,
+#'     `2` = 11647,
+#'     `3` = 11939,
+#'     `4` = 11680,
+#'     `5` = 10600,
+#'     `6` = 11100,
+#'     `7` = 11157,
+#'     `8` = 11238,
+#'     `9` = 11544,
+#'     `10` = 7216,
+#'     `11` = 7407,
+#'     `12` = 7461,
+#'     `13` = 7656,
+#'     `14` = 7774,
+#'     `15` = 5709,
+#'     `16` = 5629,
+#'     `17` = 5745,
+#'     `18` = 6056,
+#'     `19` = 6259,
+#'     `20` = 5303,
+#'     `21` = 5423,
+#'     `22` = 5497,
+#'     `23` = 5547,
+#'     `24` = 5417,
+#'     `25` = 5441,
+#'     `26` = 5466,
+#'     `27` = 5500,
+#'     `28` = 5668,
+#'     `29` = 5694,
+#'     `30` = 4365,
+#'     `31` = 4252,
+#'     `32` = 4122,
+#'     `33` = 4142,
+#'     `34` = 4039,
+#'     `35` = 3210,
+#'     `36` = 3222,
+#'     `37` = 3258,
+#'     `38` = 3413,
+#'     `39` = 3871,
+#'     `40` = 2684,
+#'     `41` = 2844,
+#'     `42` = 3052,
+#'     `43` = 3182,
+#'     `44` = 3237,
+#'     `45` = 2263,
+#'     `46` = 2298,
+#'     `47` = 2318,
+#'     `48` = 2257,
+#'     `49` = 2194,
+#'     `50` = 2231,
+#'     `51` = 2172,
+#'     `52` = 2072,
+#'     `53` = 2008,
+#'     `54` = 1932,
+#'     `55` = 1301,
+#'     `56` = 1262,
+#'     `57` = 1213,
+#'     `58` = 1197,
+#'     `59` = 1191,
+#'     `60` = 1601,
+#'     `61` = 1593,
+#'     `62` = 1490,
+#'     `63` = 1348,
+#'     `64` = 1299,
+#'     `65` = 568,
+#'     `66` = 745,
+#'     `67` = 843,
+#'     `68` = 801,
+#'     `69` = 925,
+#'     `70` = 806,
+#'     `71` = 883,
+#'     `72` = 796,
+#'     `73` = 725,
+#'     `74` = 672,
+#'     `75` = 470,
+#'     `76` = 441,
+#'     `77` = 340,
+#'     `78` = 300,
+#'     `79` = 289,
+#'     `80` = 4200
+#'   )
+#' pop_female_counts <-
+#'   c(
+#'     `0` = 11673,
+#'     `1` = 11474,
+#'     `2` = 11670,
+#'     `3` = 11934,
+#'     `4` = 11614,
+#'     `5` = 10603,
+#'     `6` = 11144,
+#'     `7` = 11179,
+#'     `8` = 11269,
+#'     `9` = 11617,
+#'     `10` = 6772,
+#'     `11` = 6948,
+#'     `12` = 7030,
+#'     `13` = 7211,
+#'     `14` = 7306,
+#'     `15` = 6531,
+#'     `16` = 6443,
+#'     `17` = 6535,
+#'     `18` = 6951,
+#'     `19` = 7213,
+#'     `20` = 6096,
+#'     `21` = 6234,
+#'     `22` = 6327,
+#'     `23` = 6410,
+#'     `24` = 6285,
+#'     `25` = 6464,
+#'     `26` = 6492,
+#'     `27` = 6549,
+#'     `28` = 6739,
+#'     `29` = 6795,
+#'     `30` = 5013,
+#'     `31` = 4888,
+#'     `32` = 4735,
+#'     `33` = 4747,
+#'     `34` = 4646,
+#'     `35` = 3040,
+#'     `36` = 3068,
+#'     `37` = 3107,
+#'     `38` = 3246,
+#'     `39` = 3658,
+#'     `40` = 2650,
+#'     `41` = 2788,
+#'     `42` = 2977,
+#'     `43` = 3108,
+#'     `44` = 3156,
+#'     `45` = 1756,
+#'     `46` = 1784,
+#'     `47` = 1802,
+#'     `48` = 1764,
+#'     `49` = 1724,
+#'     `50` = 1982,
+#'     `51` = 1935,
+#'     `52` = 1846,
+#'     `53` = 1795,
+#'     `54` = 1731,
+#'     `55` = 863,
+#'     `56` = 850,
+#'     `57` = 825,
+#'     `58` = 819,
+#'     `59` = 816,
+#'     `60` = 1348,
+#'     `61` = 1342,
+#'     `62` = 1246,
+#'     `63` = 1138,
+#'     `64` = 1101,
+#'     `65` = 391,
+#'     `66` = 520,
+#'     `67` = 585,
+#'     `68` = 560,
+#'     `69` = 659,
+#'     `70` = 670,
+#'     `71` = 750,
+#'     `72` = 686,
+#'     `73` = 634,
+#'     `74` = 604,
+#'     `75` = 353,
+#'     `76` = 340,
+#'     `77` = 270,
+#'     `78` = 246,
+#'     `79` = 247,
+#'     `80` = 4143
+#'   )
+#'
+#' single2abridged(pop_male_counts)
+#' 
+single2abridged <- function(Age) {
+  age_names <- as.integer(seq_along(Age) - 1)
+  abridged_index <- calcAgeAbr(age_names)
+  tapply(Age, abridged_index, sum)
+}
+
 
 # deprecated functions
 

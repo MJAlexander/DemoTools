@@ -30,4 +30,16 @@ plot(x)
 lines(ma(x))
 lines(ma(x),9)
 }
+# some de facto unit tests:
+x <- 1:10
+d2 <- ma(x,2) - x
+d3 <- ma(x,3) - x
+d4 <- ma(x,4) - x
+d5 <- ma(x,5) - x
+# pop <- sample.int(10, 5, replace = T)
+# all should give same for linear data.
+stopifnot(all(abs(d2) < 1e-10, na.rm = TRUE))
+stopifnot(all(abs(d3) < 1e-10, na.rm = TRUE))
+stopifnot(all(abs(d4) < 1e-10, na.rm = TRUE))
+stopifnot(all(abs(d5) < 1e-10, na.rm = TRUE))
 }
